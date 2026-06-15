@@ -19,15 +19,15 @@ def tearDownModule():
 
 class GridSearchConfigTests(unittest.TestCase):
     def test_cnn_grid_config_keeps_split_and_patience_out_of_search_grid(self):
-        self.assertEqual(grid_search_config_cnn.SEARCH_ID, "cnn_spatial25_v1")
+        self.assertEqual(grid_search_config_cnn.SEARCH_ID, "cnn_spatial25_anti_overfit_v1")
         self.assertEqual(grid_search_config_cnn.RESULT_PREFIX, "cnn_surrogate_fine_tuning")
         self.assertNotIn("train_test_split", grid_search_config_cnn.PARAM_GRID)
         self.assertNotIn("early_stopping_patience", grid_search_config_cnn.PARAM_GRID)
         self.assertNotIn("loss_weight_strain", grid_search_config_cnn.PARAM_GRID)
-        self.assertEqual(grid_search_config_cnn.PARAM_GRID["spatial_pool_height"], [8, 10, 12])
-        self.assertEqual(grid_search_config_cnn.PARAM_GRID["spatial_pool_width"], [4, 5, 6])
-        self.assertEqual(grid_search_config_cnn.PARAM_GRID["embedding_dim"], [128, 256, 384])
-        self.assertEqual(grid_search_config_cnn.PARAM_GRID["loss_weight_local_strain"], [0.5, 1.0, 2.0])
+        self.assertEqual(grid_search_config_cnn.PARAM_GRID["spatial_pool_height"], [6])
+        self.assertEqual(grid_search_config_cnn.PARAM_GRID["spatial_pool_width"], [3])
+        self.assertEqual(grid_search_config_cnn.PARAM_GRID["embedding_dim"], [64])
+        self.assertEqual(grid_search_config_cnn.PARAM_GRID["loss_weight_local_strain"], [0.5, 1.0, 1.5])
 
     def test_distilled_grid_config_keeps_split_and_patience_out_of_search_grid(self):
         self.assertEqual(grid_search_config_distilled.SEARCH_ID, "distilled_v1")

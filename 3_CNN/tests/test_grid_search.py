@@ -13,6 +13,7 @@ SRC_DIR = CNN_ROOT / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 from cnn_surrogate.config import BaselineTrainingConfig, CoordinateTrainingConfig
+from cnn_surrogate import grid_search as grid_search_module
 from cnn_surrogate.grid_search import (
     average_rmse,
     build_trial_id,
@@ -219,6 +220,171 @@ class GridSearchUtilityTests(unittest.TestCase):
 
 
 class GridSearchRunnerTests(unittest.TestCase):
+    def test_run_grid_search_places_trial_artifacts_under_search_parent(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            captured_configs = []
+
+            def fake_runner(config):
+                captured_configs.append(config)
+                os.makedirs(config.output_dir, exist_ok=True)
+                with open(os.path.join(config.output_dir, "marker.txt"), "w", encoding="utf-8") as handle:
+                    handle.write("ran")
+                return _cnn_metric_result(0.1, 0.5)
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                summary = run_grid_search(
+                    model_name="cnn",
+                    search_config=SearchConfig,
+                    base_config_builder=_base_config,
+                    training_runner=fake_runner,
+                    results_root=os.path.join(temp_dir, "results"),
+                    temp_root=os.path.join(temp_dir, "temp"),
+                    device="cuda",
+                    train_test_split=180,
+                    early_stopping_patience=50,
+                    save_figures=False,
+                    save_all=True,
+                    save_best_model=False,
+                )
+
+            search_dir = os.path.join(temp_dir, "results", "unit_fine_tuning_unit_v1")
+            self.assertEqual(summary["search_dir"], search_dir)
+            self.assertTrue(captured_configs[0].output_dir.startswith(search_dir))
+            self.assertIn(os.path.join("trials", "unit_v1_0001", "results"), captured_configs[0].output_dir)
+            self.assertIsNone(captured_configs[0].figure_dir)
+            self.assertFalse(captured_configs[0].save_figures)
+            self.assertTrue(os.path.isfile(os.path.join(search_dir, "search_results.jsonl")))
+
+    def test_run_grid_search_save_all_retains_each_trial_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            def fake_runner(config):
+                os.makedirs(config.output_dir, exist_ok=True)
+                with open(os.path.join(config.output_dir, "marker.txt"), "w", encoding="utf-8") as handle:
+                    handle.write("ran")
+                return _cnn_metric_result(0.2, 0.2)
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                run_grid_search(
+                    model_name="cnn",
+                    search_config=SearchConfig,
+                    base_config_builder=_base_config,
+                    training_runner=fake_runner,
+                    results_root=os.path.join(temp_dir, "results"),
+                    temp_root=os.path.join(temp_dir, "temp"),
+                    device="cuda",
+                    train_test_split=180,
+                    early_stopping_patience=50,
+                    save_figures=False,
+                    save_all=True,
+                    save_best_model=False,
+                )
+
+            search_dir = os.path.join(temp_dir, "results", "unit_fine_tuning_unit_v1")
+            self.assertTrue(os.path.isfile(os.path.join(
+                search_dir, "trials", "unit_v1_0001", "results", "marker.txt"
+            )))
+            self.assertTrue(os.path.isfile(os.path.join(
+                search_dir, "trials", "unit_v1_0002", "results", "marker.txt"
+            )))
+
+    def test_run_grid_search_prunes_non_best_trial_directories_by_default(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            calls = []
+
+            def fake_runner(config):
+                calls.append(config)
+                os.makedirs(config.output_dir, exist_ok=True)
+                with open(os.path.join(config.output_dir, "marker.txt"), "w", encoding="utf-8") as handle:
+                    handle.write("ran")
+                if len(calls) == 1:
+                    return _cnn_metric_result(0.4, 0.4)
+                return _cnn_metric_result(0.1, 0.1)
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                run_grid_search(
+                    model_name="cnn",
+                    search_config=SearchConfig,
+                    base_config_builder=_base_config,
+                    training_runner=fake_runner,
+                    results_root=os.path.join(temp_dir, "results"),
+                    temp_root=os.path.join(temp_dir, "temp"),
+                    device="cuda",
+                    train_test_split=180,
+                    early_stopping_patience=50,
+                    save_figures=False,
+                    save_all=False,
+                    save_best_model=False,
+                )
+
+            search_dir = os.path.join(temp_dir, "results", "unit_fine_tuning_unit_v1")
+            self.assertFalse(os.path.exists(os.path.join(search_dir, "trials", "unit_v1_0001")))
+            self.assertTrue(os.path.exists(os.path.join(search_dir, "trials", "unit_v1_0002")))
+            self.assertTrue(os.path.isfile(os.path.join(search_dir, "search_results.jsonl")))
+            self.assertTrue(os.path.isfile(os.path.join(search_dir, "best_results.json")))
+
+    def test_run_grid_search_retained_failed_trial_writes_attempted_trial_config(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            def failing_runner(config):
+                raise RuntimeError("boom")
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                run_grid_search(
+                    model_name="cnn",
+                    search_config=SearchConfig,
+                    base_config_builder=_base_config,
+                    training_runner=failing_runner,
+                    results_root=os.path.join(temp_dir, "results"),
+                    temp_root=os.path.join(temp_dir, "temp"),
+                    device="cuda",
+                    train_test_split=180,
+                    early_stopping_patience=50,
+                    save_figures=False,
+                    save_all=True,
+                    save_best_model=False,
+                )
+
+            search_dir = os.path.join(temp_dir, "results", "unit_fine_tuning_unit_v1")
+            trial_config_path = os.path.join(
+                search_dir,
+                "trials",
+                "unit_v1_0001",
+                "results",
+                "trial_config.json",
+            )
+
+            with open(trial_config_path, "r", encoding="utf-8") as handle:
+                trial_config = json.load(handle)
+
+            self.assertEqual(trial_config["batch_size"], 16)
+            self.assertIn(os.path.join("trials", "unit_v1_0001", "results"), trial_config["output_dir"])
+            self.assertIsNone(trial_config["figure_dir"])
+            self.assertFalse(trial_config["save_figures"])
+            self.assertEqual(
+                trial_config["checkpoint_path"],
+                os.path.join(trial_config["output_dir"], "checkpoint.pt"),
+            )
+
+    def test_is_within_directory_rejects_sibling_paths(self):
+        parent = os.path.join("tmp", "search")
+        child = os.path.join("tmp", "search-trial")
+
+        self.assertTrue(grid_search_module._is_within_directory(parent, os.path.join(parent, "trial")))
+        self.assertFalse(grid_search_module._is_within_directory(parent, child))
+
+    def test_prune_trial_artifacts_ignores_malformed_search_parent_record(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            search_dir = os.path.join(temp_dir, "results", "unit_fine_tuning_unit_v1")
+            os.makedirs(search_dir)
+            marker_path = os.path.join(search_dir, "search_results.jsonl")
+            with open(marker_path, "w", encoding="utf-8") as handle:
+                handle.write("")
+
+            records = [{"trial_id": "unit_v1_0001", "trial_dir": search_dir}]
+
+            grid_search_module._prune_trial_artifacts(search_dir, records, {}, save_all=False)
+
+            self.assertTrue(os.path.isfile(marker_path))
+
     def test_run_grid_search_skips_completed_trial_and_records_internal_parameters(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             search_dir = os.path.join(temp_dir, "results", "unit_fine_tuning_unit_v1")
@@ -235,6 +401,7 @@ class GridSearchRunnerTests(unittest.TestCase):
                     "strain_rmse": 0.4,
                     "average_rmse": 0.3,
                 },
+                "trial_dir": os.path.join(search_dir, "trials", "unit_v1_0001"),
             }
             with open(os.path.join(search_dir, "search_results.jsonl"), "w", encoding="utf-8") as handle:
                 handle.write(json.dumps(first_record, sort_keys=True) + "\n")
@@ -253,12 +420,13 @@ class GridSearchRunnerTests(unittest.TestCase):
                     base_config_builder=_base_config,
                     training_runner=fake_runner,
                     results_root=os.path.join(temp_dir, "results"),
-                    figures_root=os.path.join(temp_dir, "figures"),
                     temp_root=os.path.join(temp_dir, "temp"),
                     device="cuda",
                     train_test_split=180,
                     early_stopping_patience=50,
-                    save_best=False,
+                    save_figures=False,
+                    save_all=False,
+                    save_best_model=False,
                 )
 
             self.assertEqual(len(captured_configs), 1)
@@ -267,6 +435,7 @@ class GridSearchRunnerTests(unittest.TestCase):
             self.assertEqual(captured_configs[0].device, "cuda")
             self.assertTrue(captured_configs[0].show_progress)
             self.assertFalse(captured_configs[0].save_model)
+            self.assertFalse(os.path.exists(first_record["trial_dir"]))
             self.assertEqual(summary["records"][1]["scores"]["local_strain_rmse"], 0.5)
             self.assertEqual(summary["records"][1]["scores"]["strain_rmse"], 0.5)
             self.assertEqual(summary["best_results"]["best_stiffness"]["trial_id"], "unit_v1_0002")
@@ -281,9 +450,11 @@ class GridSearchRunnerTests(unittest.TestCase):
             self.assertEqual(best_results["best_stiffness"]["trial_id"], "unit_v1_0002")
             self.assertTrue(os.path.isfile(os.path.join(search_dir, "search_results.csv")))
             with open(os.path.join(search_dir, "search_results.csv"), "r", encoding="utf-8") as handle:
-                self.assertIn("local_strain_rmse", handle.readline())
+                header = handle.readline()
+            self.assertIn("local_strain_rmse", header)
+            self.assertIn("trial_dir", header)
 
-    def test_run_grid_search_save_best_retrains_best_average_to_final_directory(self):
+    def test_run_grid_search_save_model_retrains_best_average_to_final_directory(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             calls = []
 
@@ -302,21 +473,23 @@ class GridSearchRunnerTests(unittest.TestCase):
                     base_config_builder=_base_config,
                     training_runner=fake_runner,
                     results_root=os.path.join(temp_dir, "results"),
-                    figures_root=os.path.join(temp_dir, "figures"),
                     temp_root=os.path.join(temp_dir, "temp"),
                     device="cuda",
                     train_test_split=180,
                     early_stopping_patience=50,
-                    save_best=True,
+                    save_figures=False,
+                    save_all=False,
+                    save_best_model=True,
                 )
 
             self.assertEqual(len(calls), 3)
             self.assertEqual(calls[-1].output_dir, os.path.join("3_CNN", "results", "cnn_surrogate"))
             self.assertEqual(calls[-1].figure_dir, os.path.join("3_CNN", "figures", "cnn_surrogate"))
+            self.assertTrue(calls[-1].save_figures)
             self.assertTrue(calls[-1].save_model)
             self.assertEqual(calls[-1].batch_size, 32)
 
-    def test_run_grid_search_save_best_supports_coordinate_final_directory(self):
+    def test_run_grid_search_save_model_supports_coordinate_final_directory(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             calls = []
 
@@ -331,17 +504,19 @@ class GridSearchRunnerTests(unittest.TestCase):
                     base_config_builder=_coordinate_base_config,
                     training_runner=fake_runner,
                     results_root=os.path.join(temp_dir, "results"),
-                    figures_root=os.path.join(temp_dir, "figures"),
                     temp_root=os.path.join(temp_dir, "temp"),
                     device="cuda",
                     train_test_split=180,
                     early_stopping_patience=50,
-                    save_best=True,
+                    save_figures=False,
+                    save_all=False,
+                    save_best_model=True,
                 )
 
             self.assertEqual(calls[-1].output_dir, os.path.join("3_CNN", "results", "coordinate_surrogate"))
             self.assertEqual(calls[-1].figure_dir, os.path.join("3_CNN", "figures", "coordinate_surrogate"))
             self.assertEqual(calls[-1].checkpoint_path, os.path.join("3_CNN", "results", "coordinate_surrogate", "checkpoint.pt"))
+            self.assertTrue(calls[-1].save_figures)
             self.assertTrue(calls[-1].save_model)
             self.assertEqual(calls[0].checkpoint_path, os.path.join(calls[0].output_dir, "checkpoint.pt"))
 

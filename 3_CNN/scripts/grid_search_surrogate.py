@@ -36,9 +36,19 @@ def parse_args(argv=None):
         help="Training device. Defaults to cuda for GPU search; use cpu for local CPU debugging.",
     )
     parser.add_argument(
-        "--save",
+        "--figure",
         action="store_true",
-        help="Retrain the best_average parameter set into the official result directory.",
+        help="Save per-trial training figures. Disabled by default to reduce search artifacts.",
+    )
+    parser.add_argument(
+        "--save-all",
+        action="store_true",
+        help="Keep every trial output directory instead of pruning non-best trial artifacts.",
+    )
+    parser.add_argument(
+        "--save-model",
+        action="store_true",
+        help="Retrain the best_average parameter set into the official model result directory.",
     )
     return parser.parse_args(argv)
 
@@ -83,12 +93,13 @@ def main(argv=None):
             base_config_builder=components["base_config_builder"],
             training_runner=components["training_runner"],
             results_root=os.path.join("3_CNN", "results"),
-            figures_root=os.path.join("3_CNN", "figures"),
             temp_root=os.path.join("3_CNN", "temp"),
             device=args.device,
             train_test_split=TRAIN_TEST_SPLIT,
             early_stopping_patience=EARLY_STOPPING_PATIENCE,
-            save_best=args.save,
+            save_figures=args.figure,
+            save_all=args.save_all,
+            save_best_model=args.save_model,
         )
     return 0
 

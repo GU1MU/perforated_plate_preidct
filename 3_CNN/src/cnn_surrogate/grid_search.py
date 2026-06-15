@@ -4,6 +4,7 @@ import itertools
 import json
 import math
 import os
+import shutil
 import traceback
 from dataclasses import asdict, replace
 
@@ -159,6 +160,7 @@ def _write_results_csv(path, records):
         "local_strain_rmse",
         "strain_rmse",
         "average_rmse",
+        "trial_dir",
         "output_dir",
         "figure_dir",
         "params_json",
@@ -177,6 +179,7 @@ def _write_results_csv(path, records):
                 "local_strain_rmse": scores.get("local_strain_rmse"),
                 "strain_rmse": scores.get("strain_rmse"),
                 "average_rmse": scores.get("average_rmse"),
+                "trial_dir": record.get("trial_dir"),
                 "output_dir": record.get("output_dir"),
                 "figure_dir": record.get("figure_dir"),
                 "params_json": json.dumps(record.get("params", {}), sort_keys=True),
@@ -193,12 +196,13 @@ def _existing_completed_by_hash(records):
     return completed
 
 
-def _trial_paths(search_config, trial_id, results_root, figures_root, temp_root):
-    trial_name = "%s_%s" % (search_config.RESULT_PREFIX, trial_id)
+def _trial_paths(search_config, trial_id, search_dir):
+    trial_dir = os.path.join(search_dir, "trials", trial_id)
     return {
-        "output_dir": os.path.join(results_root, trial_name),
-        "figure_dir": os.path.join(figures_root, trial_name),
-        "temp_dir": os.path.join(temp_root, trial_name),
+        "trial_dir": trial_dir,
+        "output_dir": os.path.join(trial_dir, "results"),
+        "figure_dir": os.path.join(trial_dir, "figures"),
+        "temp_dir": os.path.join(trial_dir, "temp"),
     }
 
 
@@ -210,6 +214,7 @@ def build_trial_config(
     device,
     train_test_split,
     early_stopping_patience,
+    save_figures,
     save_model,
     progress_description,
 ):
@@ -218,13 +223,14 @@ def build_trial_config(
         updates["epochs"] = updates["student_epochs"]
     updates.update({
         "output_dir": paths["output_dir"],
-        "figure_dir": paths["figure_dir"],
+        "figure_dir": paths["figure_dir"] if save_figures else None,
         "temp_dir": paths["temp_dir"],
         "train_test_split": train_test_split,
         "early_stopping_patience": early_stopping_patience,
         "device": device,
         "show_progress": True,
         "progress_description": progress_description,
+        "save_figures": save_figures,
         "save_model": save_model,
     })
     if hasattr(base_config, "checkpoint_path"):
@@ -239,7 +245,7 @@ def _record_progress_files(search_dir, records):
     return best_results
 
 
-def _completed_record(search_config, model_name, trial_id, params, paths, result):
+def _completed_record(search_config, model_name, trial_id, params, paths, result, save_figures):
     scores = extract_scores(model_name, result)
     record = {
         "search_id": search_config.SEARCH_ID,
@@ -248,13 +254,14 @@ def _completed_record(search_config, model_name, trial_id, params, paths, result
         "status": "completed",
         "params": params,
         "scores": scores,
+        "trial_dir": paths["trial_dir"],
         "output_dir": paths["output_dir"],
-        "figure_dir": paths["figure_dir"],
+        "figure_dir": paths["figure_dir"] if save_figures else None,
     }
     return record
 
 
-def _failed_record(search_config, trial_id, params, paths, error):
+def _failed_record(search_config, trial_id, params, paths, error, save_figures):
     return {
         "search_id": search_config.SEARCH_ID,
         "trial_id": trial_id,
@@ -263,8 +270,9 @@ def _failed_record(search_config, trial_id, params, paths, error):
         "params": params,
         "error": str(error),
         "traceback": traceback.format_exc(),
+        "trial_dir": paths["trial_dir"],
         "output_dir": paths["output_dir"],
-        "figure_dir": paths["figure_dir"],
+        "figure_dir": paths["figure_dir"] if save_figures else None,
     }
 
 
@@ -272,6 +280,55 @@ def _write_trial_files(paths, config, record):
     ensure_directory(paths["output_dir"])
     _write_json(os.path.join(paths["output_dir"], "trial_config.json"), asdict(config))
     _write_json(os.path.join(paths["output_dir"], "trial_result.json"), record)
+
+
+def _is_within_directory(parent, child):
+    parent_path = os.path.abspath(parent)
+    child_path = os.path.abspath(child)
+    try:
+        return os.path.commonpath([parent_path, child_path]) == parent_path
+    except ValueError:
+        return False
+
+
+def _best_trial_ids(best_results):
+    trial_ids = set()
+    for record in best_results.values():
+        if record and record.get("trial_id"):
+            trial_ids.add(record["trial_id"])
+    return trial_ids
+
+
+def _is_expected_trial_directory(search_dir, trial_id, trial_dir):
+    if not trial_id or not trial_dir:
+        return False
+    trials_dir = os.path.join(search_dir, "trials")
+    expected_dir = os.path.join(trials_dir, trial_id)
+    trial_path = os.path.abspath(trial_dir)
+    expected_path = os.path.abspath(expected_dir)
+    trials_path = os.path.abspath(trials_dir)
+    return (
+        trial_path == expected_path
+        and trial_path != trials_path
+        and _is_within_directory(trials_dir, trial_path)
+    )
+
+
+def _prune_trial_artifacts(search_dir, records, best_results, save_all):
+    if save_all:
+        return
+    keep_trial_ids = _best_trial_ids(best_results)
+    for record in records:
+        trial_id = record.get("trial_id")
+        trial_dir = record.get("trial_dir")
+        if not trial_dir or trial_id in keep_trial_ids:
+            continue
+        if (
+            _is_expected_trial_directory(search_dir, trial_id, trial_dir)
+            and _is_within_directory(search_dir, trial_dir)
+            and os.path.isdir(trial_dir)
+        ):
+            shutil.rmtree(trial_dir)
 
 
 def _rerun_best_average(
@@ -294,6 +351,7 @@ def _rerun_best_average(
         device=device,
         train_test_split=train_test_split,
         early_stopping_patience=early_stopping_patience,
+        save_figures=True,
         save_model=True,
         progress_description="Training %s best_average" % model_name,
     )
@@ -308,12 +366,13 @@ def run_grid_search(
     base_config_builder,
     training_runner,
     results_root,
-    figures_root,
     temp_root,
     device,
     train_test_split,
     early_stopping_patience,
-    save_best=False,
+    save_figures=False,
+    save_all=False,
+    save_best_model=False,
 ):
     search_dir = os.path.join(results_root, "%s_%s" % (search_config.RESULT_PREFIX, search_config.SEARCH_ID))
     ensure_directory(search_dir)
@@ -330,7 +389,8 @@ def run_grid_search(
             print("[%d/%d] skipped %s" % (index, total, trial_id), flush=True)
             continue
 
-        paths = _trial_paths(search_config, trial_id, results_root, figures_root, temp_root)
+        paths = _trial_paths(search_config, trial_id, search_dir)
+        config = None
         print("[%d/%d] running %s" % (index, total, trial_id), flush=True)
         try:
             config = build_trial_config(
@@ -341,25 +401,28 @@ def run_grid_search(
                 device=device,
                 train_test_split=train_test_split,
                 early_stopping_patience=early_stopping_patience,
+                save_figures=save_figures,
                 save_model=False,
                 progress_description="Training %s %s" % (model_name, trial_id),
             )
             result = training_runner(config)
-            record = _completed_record(search_config, model_name, trial_id, params, paths, result)
+            record = _completed_record(search_config, model_name, trial_id, params, paths, result, save_figures)
             print("[%d/%d] finished %s" % (index, total, trial_id), flush=True)
         except Exception as error:
-            record = _failed_record(search_config, trial_id, params, paths, error)
+            record = _failed_record(search_config, trial_id, params, paths, error, save_figures)
             print("[%d/%d] failed %s: %s" % (index, total, trial_id, error), flush=True)
 
         _append_jsonl(jsonl_path, record)
         records.append(record)
         if record["status"] == "completed":
             completed[current_hash] = record
-        _write_trial_files(paths, config if record["status"] == "completed" else base_config_builder(), record)
+        _write_trial_files(paths, config if config is not None else base_config_builder(), record)
         best_results = _record_progress_files(search_dir, records)
+        _prune_trial_artifacts(search_dir, records, best_results, save_all)
 
     best_results = _record_progress_files(search_dir, records)
-    if save_best:
+    _prune_trial_artifacts(search_dir, records, best_results, save_all)
+    if save_best_model:
         best_average = best_results.get("best_average")
         if best_average is None:
             raise RuntimeError("cannot save best model because no completed best_average result exists")

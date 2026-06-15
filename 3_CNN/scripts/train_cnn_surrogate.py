@@ -32,6 +32,7 @@ SHOW_PROGRESS = True
 PROGRESS_DESCRIPTION = "Training CNN surrogate"
 
 SAVE_MODEL = True
+SAVE_FIGURES = True
 WARM_START = True
 CHECKPOINT_PATH = os.path.join(OUTPUT_DIR, "checkpoint.pt")
 
@@ -70,6 +71,7 @@ def build_config():
         show_progress=SHOW_PROGRESS,
         progress_description=PROGRESS_DESCRIPTION,
         save_model=SAVE_MODEL,
+        save_figures=SAVE_FIGURES,
         spatial_pool_height=SPATIAL_POOL_HEIGHT,
         spatial_pool_width=SPATIAL_POOL_WIDTH,
         embedding_dim=EMBEDDING_DIM,

@@ -28,15 +28,36 @@ def tearDownModule():
 
 
 class GridSearchScriptTests(unittest.TestCase):
-    def test_script_defaults_to_cuda_and_fixed_internal_training_parameters(self):
+    def test_script_defaults_to_cuda_and_new_artifact_flags(self):
         module = _load_script()
         args = module.parse_args(["--model", "cnn"])
 
         self.assertEqual(args.model, "cnn")
         self.assertEqual(args.device, "cuda")
-        self.assertFalse(args.save)
+        self.assertFalse(args.figure)
+        self.assertFalse(args.save_all)
+        self.assertFalse(args.save_model)
         self.assertEqual(module.EARLY_STOPPING_PATIENCE, 50)
         self.assertEqual(module.TRAIN_TEST_SPLIT, 180)
+
+    def test_script_accepts_figure_save_all_and_save_model(self):
+        module = _load_script()
+        args = module.parse_args([
+            "--model", "cnn",
+            "--figure",
+            "--save-all",
+            "--save-model",
+        ])
+
+        self.assertTrue(args.figure)
+        self.assertTrue(args.save_all)
+        self.assertTrue(args.save_model)
+
+    def test_script_rejects_removed_save_argument(self):
+        module = _load_script()
+
+        with self.assertRaises(SystemExit):
+            module.parse_args(["--model", "cnn", "--save"])
 
     def test_main_dispatches_distilled_search(self):
         module = _load_script()
@@ -49,14 +70,16 @@ class GridSearchScriptTests(unittest.TestCase):
         original_run_grid_search = module.run_grid_search
         try:
             module.run_grid_search = fake_run_grid_search
-            self.assertEqual(module.main(["--model", "distilled", "--device", "cpu", "--save"]), 0)
+            self.assertEqual(module.main(["--model", "distilled", "--device", "cpu", "--save-model"]), 0)
         finally:
             module.run_grid_search = original_run_grid_search
 
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["model_name"], "distilled")
         self.assertEqual(calls[0]["device"], "cpu")
-        self.assertTrue(calls[0]["save_best"])
+        self.assertTrue(calls[0]["save_best_model"])
+        self.assertFalse(calls[0]["save_all"])
+        self.assertFalse(calls[0]["save_figures"])
         self.assertEqual(calls[0]["train_test_split"], 180)
         self.assertEqual(calls[0]["early_stopping_patience"], 50)
 
@@ -78,7 +101,9 @@ class GridSearchScriptTests(unittest.TestCase):
         self.assertEqual([call["model_name"] for call in calls], ["cnn", "distilled"])
         for call in calls:
             self.assertEqual(call["device"], "cpu")
-            self.assertFalse(call["save_best"])
+            self.assertFalse(call["save_best_model"])
+            self.assertFalse(call["save_all"])
+            self.assertFalse(call["save_figures"])
             self.assertEqual(call["train_test_split"], 180)
             self.assertEqual(call["early_stopping_patience"], 50)
 

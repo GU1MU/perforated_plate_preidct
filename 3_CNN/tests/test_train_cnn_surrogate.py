@@ -52,6 +52,7 @@ class TrainCnnSurrogateScriptTests(unittest.TestCase):
         self.assertEqual(cnn.SHOW_PROGRESS, True)
         self.assertEqual(cnn.PROGRESS_DESCRIPTION, "Training CNN surrogate")
         self.assertEqual(cnn.SAVE_MODEL, True)
+        self.assertEqual(cnn.SAVE_FIGURES, True)
 
     def test_build_config_maps_constants_to_training_config(self):
         config = cnn.build_config()
@@ -85,6 +86,7 @@ class TrainCnnSurrogateScriptTests(unittest.TestCase):
         self.assertEqual(config.show_progress, cnn.SHOW_PROGRESS)
         self.assertEqual(config.progress_description, cnn.PROGRESS_DESCRIPTION)
         self.assertEqual(config.save_model, cnn.SAVE_MODEL)
+        self.assertEqual(config.save_figures, cnn.SAVE_FIGURES)
 
     def test_main_runs_baseline_training_with_built_config(self):
         calls = []
