@@ -4,12 +4,13 @@
 SEARCH_ID = "cnn_spatial25_anti_overfit_v1"
 RESULT_PREFIX = "cnn_surrogate_fine_tuning"
 
-# 2 * 2 * 3 * 3 * 3 * 3 = 324 combinations.
+# With early stopping, epochs is a fixed upper bound instead of a search axis.
+# 2 * 1 * 3 * 6 * 3 * 3 = 324 combinations.
 PARAM_GRID = {
     "batch_size": [32, 64],
-    "epochs": [60, 120],
+    "epochs": [300],
     "learning_rate": [5.0e-4, 2.5e-4, 1.0e-4],
-    "weight_decay": [3.0e-4, 1.0e-3, 3.0e-3],
+    "weight_decay": [1.0e-4, 3.0e-4, 1.0e-3, 3.0e-3, 1.0e-2, 2.0e-2],
     "dropout": [0.35, 0.5, 0.65],
     "loss_weight_stiffness": [1.0],
     "spatial_pool_height": [6],
