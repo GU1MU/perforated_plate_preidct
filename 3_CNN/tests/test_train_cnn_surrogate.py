@@ -1,3 +1,4 @@
+import inspect
 import os
 import sys
 import unittest
@@ -52,6 +53,7 @@ class TrainCnnSurrogateScriptTests(unittest.TestCase):
         self.assertEqual(cnn.SHOW_PROGRESS, True)
         self.assertEqual(cnn.PROGRESS_DESCRIPTION, "Training CNN surrogate")
         self.assertEqual(cnn.SAVE_MODEL, True)
+        self.assertEqual(cnn.SAVE_FIGURES, True)
 
     def test_build_config_maps_constants_to_training_config(self):
         config = cnn.build_config()
@@ -85,6 +87,20 @@ class TrainCnnSurrogateScriptTests(unittest.TestCase):
         self.assertEqual(config.show_progress, cnn.SHOW_PROGRESS)
         self.assertEqual(config.progress_description, cnn.PROGRESS_DESCRIPTION)
         self.assertEqual(config.save_model, cnn.SAVE_MODEL)
+        self.assertEqual(config.save_figures, cnn.SAVE_FIGURES)
+
+    def test_build_config_adds_run_id_to_result_paths(self):
+        self.assertIn("run_id", inspect.signature(cnn.build_config).parameters)
+
+        config = cnn.build_config(run_id="abc")
+
+        expected_output_dir = os.path.join("3_CNN", "results", "cnn_surrogate_abc")
+        expected_figure_dir = os.path.join("3_CNN", "figures", "cnn_surrogate_abc")
+        self.assertEqual(config.output_dir, expected_output_dir)
+        self.assertEqual(config.figure_dir, expected_figure_dir)
+        self.assertEqual(config.temp_dir, cnn.TEMP_DIR)
+        self.assertEqual(config.checkpoint_path, os.path.join(expected_output_dir, "checkpoint.pt"))
+        self.assertTrue(config.save_figures)
 
     def test_main_runs_baseline_training_with_built_config(self):
         calls = []
@@ -104,6 +120,31 @@ class TrainCnnSurrogateScriptTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertIsInstance(calls[0], BaselineTrainingConfig)
         self.assertEqual(calls[0], cnn.build_config())
+
+    def test_main_parses_run_id_for_training_config(self):
+        self.assertIn("argv", inspect.signature(cnn.main).parameters)
+
+        calls = []
+        original_run = cnn.run_baseline_training
+
+        def fake_run(config):
+            calls.append(config)
+            return {"history": [], "metrics": {}}
+
+        try:
+            cnn.run_baseline_training = fake_run
+
+            self.assertEqual(cnn.main(["--id", "abc"]), 0)
+        finally:
+            cnn.run_baseline_training = original_run
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0].output_dir, os.path.join("3_CNN", "results", "cnn_surrogate_abc"))
+        self.assertEqual(calls[0].figure_dir, os.path.join("3_CNN", "figures", "cnn_surrogate_abc"))
+        self.assertEqual(
+            calls[0].checkpoint_path,
+            os.path.join("3_CNN", "results", "cnn_surrogate_abc", "checkpoint.pt"),
+        )
 
 
 if __name__ == "__main__":

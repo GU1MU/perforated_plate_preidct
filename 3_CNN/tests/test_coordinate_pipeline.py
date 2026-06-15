@@ -332,6 +332,30 @@ class CoordinatePipelineTests(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(output_dir, "local_strain_scaler.pkl")))
             self.assertFalse(os.path.exists(os.path.join(output_dir, "target_scaler.pkl")))
 
+    def test_run_coordinate_training_skips_figures_when_disabled(self):
+        from cnn_surrogate.pipeline import run_coordinate_training
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_csv = os.path.join(temp_dir, "summary.csv")
+            output_dir = os.path.join(temp_dir, "results")
+            figure_dir = os.path.join(temp_dir, "figures_disabled")
+            work_dir = os.path.join(temp_dir, "temp")
+            _write_coordinate_csv(data_csv)
+            config = _coordinate_config(
+                data_csv=data_csv,
+                output_dir=output_dir,
+                figure_dir=figure_dir,
+                temp_dir=work_dir,
+                save_model=False,
+            )
+            config.save_figures = False
+
+            run_coordinate_training(config)
+
+            self.assertFalse(os.path.exists(figure_dir))
+            for filename in ["split_manifest.csv", "train_history.csv", "metrics.json", "predictions.csv"]:
+                self.assertTrue(os.path.isfile(os.path.join(output_dir, filename)))
+
 
 if __name__ == "__main__":
     unittest.main()

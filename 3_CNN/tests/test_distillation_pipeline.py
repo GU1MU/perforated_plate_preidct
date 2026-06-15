@@ -286,6 +286,36 @@ class DistillationPipelineTask5Tests(unittest.TestCase):
             self.assertEqual(len(result["teacher_predictions"]), 8)
             self.assertEqual(len(result["student_predictions"]), 8)
 
+    def test_run_distillation_training_skips_figures_when_disabled(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_csv = os.path.join(temp_dir, "distillation_input.csv")
+            output_dir = os.path.join(temp_dir, "output")
+            figure_dir = os.path.join(temp_dir, "figures_disabled")
+            temp_work_dir = os.path.join(temp_dir, "temp")
+            _smoke_frame().to_csv(data_csv, index=False)
+
+            config = _config(save_model=False)
+            config.data_csv = data_csv
+            config.output_dir = output_dir
+            config.figure_dir = figure_dir
+            config.temp_dir = temp_work_dir
+            config.train_test_split = 2
+            config.save_figures = False
+
+            run_distillation_training(config)
+
+            self.assertFalse(os.path.exists(figure_dir))
+            for filename in [
+                "split_manifest.csv",
+                "teacher_train_history.csv",
+                "student_train_history.csv",
+                "teacher_predictions.csv",
+                "student_predictions.csv",
+                "teacher_metrics.json",
+                "student_metrics.json",
+            ]:
+                self.assertTrue(os.path.isfile(os.path.join(output_dir, filename)))
+
     def test_train_distilled_surrogate_script_exports_expected_config(self):
         script_path = CNN_ROOT / "scripts" / "train_distilled_surrogate.py"
         spec = importlib.util.spec_from_file_location("train_distilled_surrogate", str(script_path))
@@ -301,8 +331,10 @@ class DistillationPipelineTask5Tests(unittest.TestCase):
         self.assertEqual(module.DISTILL_WEIGHT, 0.3)
         self.assertEqual(module.EARLY_STOPPING_PATIENCE, 30)
         self.assertEqual(module.DEVICE, "auto")
+        self.assertEqual(module.SAVE_FIGURES, True)
         self.assertEqual(module.build_config().early_stopping_patience, module.EARLY_STOPPING_PATIENCE)
         self.assertEqual(module.build_config().device, module.DEVICE)
+        self.assertTrue(module.build_config().save_figures)
         self.assertIsInstance(module.build_config(), DistillationTrainingConfig)
 
 

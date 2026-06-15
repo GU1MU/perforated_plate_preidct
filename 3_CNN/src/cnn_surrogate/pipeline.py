@@ -168,7 +168,8 @@ def _plot_distillation_pred_vs_true(predictions, figure_dir, prediction_suffix, 
 
 def run_baseline_training(config):
     ensure_directory(config.output_dir)
-    ensure_directory(config.figure_dir)
+    if config.save_figures:
+        ensure_directory(config.figure_dir)
     ensure_directory(config.temp_dir)
     if config.warm_start and not config.checkpoint_path:
         config.checkpoint_path = os.path.join(config.output_dir, "checkpoint.pt")
@@ -223,10 +224,11 @@ def run_baseline_training(config):
 
     write_predictions(predictions, config.output_dir)
     write_metrics(metrics, config.output_dir)
-    plot_loss_curve(history, config.figure_dir)
-    plot_cnn_stiffness_pred_vs_true(predictions, config.figure_dir)
-    plot_cnn_local_strain_pred_vs_true(predictions, config.figure_dir)
-    plot_cnn_local_strain_error_distribution(predictions, config.figure_dir)
+    if config.save_figures:
+        plot_loss_curve(history, config.figure_dir)
+        plot_cnn_stiffness_pred_vs_true(predictions, config.figure_dir)
+        plot_cnn_local_strain_pred_vs_true(predictions, config.figure_dir)
+        plot_cnn_local_strain_error_distribution(predictions, config.figure_dir)
     save_cnn_spatial_model_package(
         model,
         train_dataset.stiffness_scaler,
@@ -240,7 +242,8 @@ def run_baseline_training(config):
 
 def run_coordinate_training(config):
     ensure_directory(config.output_dir)
-    ensure_directory(config.figure_dir)
+    if config.save_figures:
+        ensure_directory(config.figure_dir)
     ensure_directory(config.temp_dir)
 
     frame = load_coordinate_dataset_table(config.data_csv)
@@ -291,10 +294,11 @@ def run_coordinate_training(config):
 
     write_predictions(predictions, config.output_dir)
     write_metrics(metrics, config.output_dir)
-    plot_loss_curve(history, config.figure_dir)
-    plot_coordinate_stiffness_pred_vs_true(predictions, config.figure_dir)
-    plot_coordinate_local_strain_pred_vs_true(predictions, config.figure_dir)
-    plot_coordinate_local_strain_rmse_by_hole(metrics, config.figure_dir)
+    if config.save_figures:
+        plot_loss_curve(history, config.figure_dir)
+        plot_coordinate_stiffness_pred_vs_true(predictions, config.figure_dir)
+        plot_coordinate_local_strain_pred_vs_true(predictions, config.figure_dir)
+        plot_coordinate_local_strain_rmse_by_hole(metrics, config.figure_dir)
     save_coordinate_model_package(
         model,
         train_dataset.stiffness_scaler,
@@ -308,7 +312,8 @@ def run_coordinate_training(config):
 
 def run_distillation_training(config):
     ensure_directory(config.output_dir)
-    ensure_directory(config.figure_dir)
+    if config.save_figures:
+        ensure_directory(config.figure_dir)
     ensure_directory(config.temp_dir)
 
     frame = _load_distillation_dataset_table(config.data_csv)
@@ -373,19 +378,20 @@ def run_distillation_training(config):
     _write_named_metrics(teacher_metrics, config.output_dir, "teacher_metrics.json")
     _write_named_metrics(student_metrics, config.output_dir, "student_metrics.json")
 
-    _plot_distillation_pred_vs_true(
-        teacher_predictions,
-        config.figure_dir,
-        prediction_suffix="teacher",
-        filename="teacher_true_vs_predict.png",
-    )
-    _plot_distillation_pred_vs_true(
-        student_predictions,
-        config.figure_dir,
-        prediction_suffix="student",
-        filename="student_true_vs_predict.png",
-    )
-    plot_teacher_vs_student(teacher_predictions, student_predictions, config.figure_dir)
+    if config.save_figures:
+        _plot_distillation_pred_vs_true(
+            teacher_predictions,
+            config.figure_dir,
+            prediction_suffix="teacher",
+            filename="teacher_true_vs_predict.png",
+        )
+        _plot_distillation_pred_vs_true(
+            student_predictions,
+            config.figure_dir,
+            prediction_suffix="student",
+            filename="student_true_vs_predict.png",
+        )
+        plot_teacher_vs_student(teacher_predictions, student_predictions, config.figure_dir)
     save_distillation_package(
         teacher_model,
         student_model,

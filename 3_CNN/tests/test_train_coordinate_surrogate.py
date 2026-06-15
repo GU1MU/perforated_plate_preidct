@@ -48,6 +48,7 @@ class TrainCoordinateSurrogateScriptTests(unittest.TestCase):
         self.assertEqual(coordinate.SHOW_PROGRESS, True)
         self.assertEqual(coordinate.PROGRESS_DESCRIPTION, "Training coordinate surrogate")
         self.assertEqual(coordinate.SAVE_MODEL, True)
+        self.assertEqual(coordinate.SAVE_FIGURES, True)
         self.assertEqual(coordinate.WARM_START, True)
         self.assertEqual(coordinate.CHECKPOINT_PATH, os.path.join(coordinate.OUTPUT_DIR, "checkpoint.pt"))
 
@@ -79,6 +80,7 @@ class TrainCoordinateSurrogateScriptTests(unittest.TestCase):
         self.assertEqual(config.show_progress, coordinate.SHOW_PROGRESS)
         self.assertEqual(config.progress_description, coordinate.PROGRESS_DESCRIPTION)
         self.assertEqual(config.save_model, coordinate.SAVE_MODEL)
+        self.assertEqual(config.save_figures, coordinate.SAVE_FIGURES)
         self.assertEqual(config.warm_start, coordinate.WARM_START)
         self.assertEqual(config.checkpoint_path, coordinate.CHECKPOINT_PATH)
 

@@ -45,6 +45,7 @@ SHOW_PROGRESS = True
 PROGRESS_DESCRIPTION = "Training distilled CNN surrogate"
 
 SAVE_MODEL = True
+SAVE_FIGURES = True
 
 
 def build_config():
@@ -71,6 +72,7 @@ def build_config():
         show_progress=SHOW_PROGRESS,
         progress_description=PROGRESS_DESCRIPTION,
         save_model=SAVE_MODEL,
+        save_figures=SAVE_FIGURES,
         teacher_epochs=TEACHER_EPOCHS,
         student_epochs=STUDENT_EPOCHS,
         teacher_learning_rate=TEACHER_LEARNING_RATE,

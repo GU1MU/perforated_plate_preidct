@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 
@@ -32,6 +33,7 @@ SHOW_PROGRESS = True
 PROGRESS_DESCRIPTION = "Training CNN surrogate"
 
 SAVE_MODEL = True
+SAVE_FIGURES = True
 WARM_START = True
 CHECKPOINT_PATH = os.path.join(OUTPUT_DIR, "checkpoint.pt")
 
@@ -46,11 +48,18 @@ from cnn_surrogate.config import BaselineTrainingConfig
 from cnn_surrogate.pipeline import run_baseline_training
 
 
-def build_config():
+def build_config(run_id=None):
+    output_dir = OUTPUT_DIR
+    figure_dir = FIGURE_DIR
+    if run_id:
+        output_dir = OUTPUT_DIR + "_" + run_id
+        figure_dir = FIGURE_DIR + "_" + run_id
+    checkpoint_path = os.path.join(output_dir, "checkpoint.pt")
+
     return BaselineTrainingConfig(
         data_csv=DATA_CSV,
-        output_dir=OUTPUT_DIR,
-        figure_dir=FIGURE_DIR,
+        output_dir=output_dir,
+        figure_dir=figure_dir,
         temp_dir=TEMP_DIR,
         train_test_split=TRAIN_TEST_SPLIT,
         split_shuffle=SPLIT_SHUFFLE,
@@ -70,19 +79,24 @@ def build_config():
         show_progress=SHOW_PROGRESS,
         progress_description=PROGRESS_DESCRIPTION,
         save_model=SAVE_MODEL,
+        save_figures=SAVE_FIGURES,
         spatial_pool_height=SPATIAL_POOL_HEIGHT,
         spatial_pool_width=SPATIAL_POOL_WIDTH,
         embedding_dim=EMBEDDING_DIM,
         loss_weight_local_strain=LOSS_WEIGHT_LOCAL_STRAIN,
         warm_start=WARM_START,
-        checkpoint_path=CHECKPOINT_PATH,
+        checkpoint_path=checkpoint_path,
     )
 
 
-def main():
-    run_baseline_training(build_config())
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Train the CNN surrogate model.")
+    parser.add_argument("--id", dest="run_id", default=None, help="Optional run id suffix for output directories.")
+    args = parser.parse_args([] if argv is None else argv)
+
+    run_baseline_training(build_config(run_id=args.run_id))
     return 0
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

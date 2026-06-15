@@ -62,6 +62,7 @@ class BaselineConfigTests(unittest.TestCase):
         self.assertEqual(config.image_height, 80)
         self.assertEqual(config.image_width, 40)
         self.assertTrue(config.show_progress)
+        self.assertTrue(config.save_figures)
 
 
 class CnnPlottingTests(unittest.TestCase):
@@ -246,6 +247,29 @@ class BaselinePipelineTests(unittest.TestCase):
             self.assertEqual(model_package["embedding_dim"], config.embedding_dim)
             self.assertEqual(model_package["spatial_pool_height"], config.spatial_pool_height)
             self.assertEqual(model_package["spatial_pool_width"], config.spatial_pool_width)
+
+    def test_run_baseline_training_skips_figures_when_disabled(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_csv = os.path.join(temp_dir, "summary.csv")
+            output_dir = os.path.join(temp_dir, "results")
+            figure_dir = os.path.join(temp_dir, "figures_disabled")
+            work_dir = os.path.join(temp_dir, "temp")
+            _write_sample_csv(data_csv)
+
+            config = _tiny_config(data_csv, output_dir, figure_dir, work_dir, save_model=False)
+            config.save_figures = False
+
+            run_baseline_training(config)
+
+            self.assertFalse(os.path.exists(figure_dir))
+            for filename in [
+                "split_manifest.csv",
+                "train_history.csv",
+                "metrics.json",
+                "predictions.csv",
+                "checkpoint.pt",
+            ]:
+                self.assertTrue(os.path.isfile(os.path.join(output_dir, filename)))
 
 
 if __name__ == "__main__":

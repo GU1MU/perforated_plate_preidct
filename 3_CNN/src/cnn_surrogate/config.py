@@ -6,7 +6,7 @@ from typing import Optional
 class BaselineTrainingConfig(object):
     data_csv: str
     output_dir: str
-    figure_dir: str
+    figure_dir: Optional[str]
     temp_dir: str
     train_test_split: int
     split_shuffle: bool
@@ -30,6 +30,7 @@ class BaselineTrainingConfig(object):
     spatial_pool_width: int = field(default=5, kw_only=True)
     embedding_dim: int = field(default=256, kw_only=True)
     loss_weight_local_strain: float = field(default=1.0, kw_only=True)
+    save_figures: bool = field(default=True, kw_only=True)
     warm_start: bool = field(default=False, kw_only=True)
     checkpoint_path: Optional[str] = field(default=None, kw_only=True)
 
@@ -47,7 +48,7 @@ class DistillationTrainingConfig(BaselineTrainingConfig):
 class CoordinateTrainingConfig(object):
     data_csv: str
     output_dir: str
-    figure_dir: str
+    figure_dir: Optional[str]
     temp_dir: str
     train_test_split: int
     split_shuffle: bool
@@ -71,3 +72,4 @@ class CoordinateTrainingConfig(object):
     save_model: bool
     warm_start: bool
     checkpoint_path: str
+    save_figures: bool = field(default=True, kw_only=True)
