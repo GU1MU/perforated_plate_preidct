@@ -1,0 +1,15 @@
+# Install from the project root with:
+#   python -m pip install -r requirements.txt
+#
+# PyTorch CUDA wheels are resolved from the official PyTorch index.
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+torch==2.7.0+cu128
+torchvision==0.22.0+cu128
+torchaudio==2.7.0+cu128
+
+numpy>=1.26
+pandas>=2.2
+scikit-learn>=1.5
+matplotlib>=3.8
+tqdm>=4.66

@@ -1,0 +1,4 @@
+﻿source_file,start_row,end_row,points,displacement_start_mm,displacement_end_mm,force_start_kN,force_end_kN,stiffness_kN_per_mm,intercept_kN,r_squared,x_range_mm,elastic_modulus_MPa,area_mm2,gauge_length_mm,elastic_modulus_std_MPa,elastic_modulus_cv_percent
+KF_curve_1.csv,68.0,278.0,211.0,0.216667,0.914667,1.642129,3.6006315,2.796770392303284,1.0565228807089238,0.9995673104960291,0.698,1864.513594868856,300.0,200.0,,
+KF_curve_2.csv,352.0,548.0,197.0,1.163667,1.83,3.9902985,6.0480775,3.1609838414347333,0.2909712296638041,0.9975499058640221,0.6663330000000001,2107.322560956489,300.0,200.0,,
+cross_validation_mean,,,,,,,,,,,,1985.9180779126723,300.0,200.0,171.69186645345962,8.645465709941009

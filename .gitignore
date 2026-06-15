@@ -1,0 +1,100 @@
+# Python environments and bytecode
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Generated figures and proposal artifacts
+figures/
+0_proposal/
+
+# Logs, scratch files, and generic temporary folders
+temp/
+tmp/
+*.log
+*.tmp
+*.bak
+*.swp
+
+# Project temporary workspaces
+2_FEM/temp/
+3_CNN/temp/
+
+# Abaqus generated files
+*.odb
+*.lck
+*.dat
+*.msg
+*.sta
+*.prt
+*.com
+*.sim
+*.mdl
+*.stt
+*.res
+*.pac
+*.abq
+*.sel
+*.fil
+*.jnl
+*.cae
+*.rpy
+*.rpy.*
+abq*.log
+2_FEM/temp/**/*.inp
+
+# Generated FEM and ML outputs
+2_FEM/results/*
+!2_FEM/results/odb_ml_data/
+!2_FEM/results/odb_ml_data/**
+3_CNN/results/
+3_CNN/figures/
+
+# Generated sample post-processing outputs
+1_samples/data/processed/
+1_samples/**/.ezdxf_cache/
+
+# ML model artifacts and experiment trackers
+*.pt
+*.pth
+*.ckpt
+*.pkl
+*.joblib
+*.onnx
+runs/
+wandb/
+mlruns/
+lightning_logs/
+checkpoints/
+
+# Large media and archives
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+
+# Allow empty directory placeholders when needed
+!.gitkeep
+!*/.gitkeep
