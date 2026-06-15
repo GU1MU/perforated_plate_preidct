@@ -20,6 +20,7 @@ from cnn_surrogate.data import CoordinateLayoutDataset, coordinate_target_column
 from cnn_surrogate.evaluation import compute_coordinate_metrics, predict_coordinate_frame, predict_frame
 from cnn_surrogate.io import save_coordinate_model_package
 from cnn_surrogate.models import CoordinateSurrogate
+from cnn_surrogate import plotting
 
 
 def tearDownModule():
@@ -213,7 +214,84 @@ class CoordinateIoTests(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(temp_dir, "target_scaler.pkl")))
 
 
+class CoordinatePlottingTests(unittest.TestCase):
+    def test_local_strain_pred_vs_true_uses_per_sample_maximum(self):
+        frame = pd.DataFrame({
+            "odb_name": ["a.odb", "b.odb"],
+            "group_index": [1, 1],
+            "instance_index": [1, 2],
+            "split": ["val", "val"],
+        })
+        for offset, column in enumerate(coordinate_target_columns()[1:], start=1):
+            frame[column + "_true"] = [float(offset), float(100 + offset)]
+            frame[column + "_pred"] = [float(offset + 1), float(101 + offset)]
+        captured = {}
+        original_plot = plotting._plot_identity_scatter
+
+        def capture_identity_scatter(true_values, pred_values, xlabel, ylabel):
+            captured["true_values"] = np.asarray(true_values)
+            captured["pred_values"] = np.asarray(pred_values)
+            captured["xlabel"] = xlabel
+            captured["ylabel"] = ylabel
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            try:
+                plotting._plot_identity_scatter = capture_identity_scatter
+                path = plotting.plot_coordinate_local_strain_pred_vs_true(frame, temp_dir)
+            finally:
+                plotting._plot_identity_scatter = original_plot
+
+            self.assertTrue(os.path.exists(path))
+
+        np.testing.assert_allclose(captured["true_values"], np.asarray([24.0, 124.0]))
+        np.testing.assert_allclose(captured["pred_values"], np.asarray([25.0, 125.0]))
+        self.assertEqual(captured["xlabel"], "FEM max local strain concentration")
+        self.assertEqual(captured["ylabel"], "CoordinateSurrogate max local strain concentration")
+
+
 class CoordinatePipelineTests(unittest.TestCase):
+    def test_run_coordinate_training_saves_best_validation_model_package(self):
+        from cnn_surrogate import training
+        from cnn_surrogate.pipeline import run_coordinate_training
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_csv = os.path.join(temp_dir, "summary.csv")
+            output_dir = os.path.join(temp_dir, "results")
+            figure_dir = os.path.join(temp_dir, "figures")
+            work_dir = os.path.join(temp_dir, "temp")
+            _write_coordinate_csv(data_csv)
+            config = _coordinate_config(
+                data_csv=data_csv,
+                output_dir=output_dir,
+                figure_dir=figure_dir,
+                temp_dir=work_dir,
+                save_model=True,
+            )
+            config.epochs = 2
+            original_run_coordinate_epoch = training.run_coordinate_epoch
+            train_call_count = {"value": 0}
+            val_losses = [0.1, 0.2]
+
+            def controlled_coordinate_epoch(model, loader, config, optimizer=None, device=None):
+                if optimizer is not None:
+                    train_call_count["value"] += 1
+                    with torch.no_grad():
+                        for parameter in model.parameters():
+                            parameter.fill_(float(train_call_count["value"]))
+                    return float(train_call_count["value"])
+                return val_losses.pop(0)
+
+            try:
+                training.run_coordinate_epoch = controlled_coordinate_epoch
+                run_coordinate_training(config)
+            finally:
+                training.run_coordinate_epoch = original_run_coordinate_epoch
+
+            package = torch.load(os.path.join(output_dir, "model.pt"), map_location=torch.device("cpu"))
+
+        first_tensor = next(iter(package["model_state_dict"].values()))
+        self.assertTrue(torch.allclose(first_tensor, torch.ones_like(first_tensor)))
+
     def test_run_coordinate_training_writes_expected_artifacts_without_model_package(self):
         from cnn_surrogate.pipeline import run_coordinate_training
 

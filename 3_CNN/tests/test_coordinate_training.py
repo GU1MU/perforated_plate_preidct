@@ -123,6 +123,67 @@ class CoordinateCheckpointSignatureTests(unittest.TestCase):
 
 
 class CoordinateTrainingTests(unittest.TestCase):
+    def test_train_coordinate_model_restores_best_validation_weights(self):
+        train_dataset = _coordinate_dataset()
+        config = _coordinate_config(epochs=2)
+        original_run_coordinate_epoch = training.run_coordinate_epoch
+        train_call_count = {"value": 0}
+        val_losses = [0.1, 0.2]
+
+        def controlled_coordinate_epoch(model, loader, config, optimizer=None, device=None):
+            if optimizer is not None:
+                train_call_count["value"] += 1
+                with torch.no_grad():
+                    for parameter in model.parameters():
+                        parameter.fill_(float(train_call_count["value"]))
+                return float(train_call_count["value"])
+            return val_losses.pop(0)
+
+        try:
+            training.run_coordinate_epoch = controlled_coordinate_epoch
+            model, history = training.train_coordinate_model(train_dataset, train_dataset, config)
+        finally:
+            training.run_coordinate_epoch = original_run_coordinate_epoch
+
+        first_parameter = next(model.parameters()).detach().cpu()
+        self.assertTrue(torch.allclose(first_parameter, torch.ones_like(first_parameter)))
+        self.assertEqual([record["val_loss"] for record in history], [0.1, 0.2])
+
+    def test_coordinate_checkpoint_stores_best_validation_weights(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            train_dataset = _coordinate_dataset()
+            config = _coordinate_config(
+                output_dir=temp_dir,
+                epochs=2,
+                warm_start=True,
+                checkpoint_path=os.path.join(temp_dir, "checkpoint.pt"),
+            )
+            original_run_coordinate_epoch = training.run_coordinate_epoch
+            train_call_count = {"value": 0}
+            val_losses = [0.1, 0.2]
+
+            def controlled_coordinate_epoch(model, loader, config, optimizer=None, device=None):
+                if optimizer is not None:
+                    train_call_count["value"] += 1
+                    with torch.no_grad():
+                        for parameter in model.parameters():
+                            parameter.fill_(float(train_call_count["value"]))
+                    return float(train_call_count["value"])
+                return val_losses.pop(0)
+
+            try:
+                training.run_coordinate_epoch = controlled_coordinate_epoch
+                training.train_coordinate_model(train_dataset, train_dataset, config)
+            finally:
+                training.run_coordinate_epoch = original_run_coordinate_epoch
+
+            checkpoint = torch.load(config.checkpoint_path, map_location=torch.device("cpu"))
+
+        best_state = checkpoint["best_model_state_dict"]
+        first_tensor = next(iter(best_state.values()))
+        self.assertTrue(torch.allclose(first_tensor, torch.ones_like(first_tensor)))
+        self.assertEqual(checkpoint["best_val_loss"], 0.1)
+
     def test_train_coordinate_model_resumes_checkpoint_history(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config = _coordinate_config(

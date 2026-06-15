@@ -270,6 +270,32 @@ class TrainModelTests(unittest.TestCase):
         self.assertEqual(signature["target_columns"][0], "relative_equivalent_stiffness")
         self.assertEqual(signature["target_columns"][-1], "hole_24_strain_concentration_factor")
 
+    def test_train_model_restores_best_validation_weights(self):
+        train_dataset = _spatial_dataset()
+        config = _config(epochs=2, batch_size=2, embedding_dim=16)
+        original_run_epoch = training.run_epoch
+        train_call_count = {"value": 0}
+        val_losses = [0.1, 0.2]
+
+        def controlled_epoch(model, loader, config, optimizer=None, device=None):
+            if optimizer is not None:
+                train_call_count["value"] += 1
+                with torch.no_grad():
+                    for parameter in model.parameters():
+                        parameter.fill_(float(train_call_count["value"]))
+                return float(train_call_count["value"])
+            return val_losses.pop(0)
+
+        try:
+            training.run_epoch = controlled_epoch
+            model, history = training.train_model(train_dataset, train_dataset, config)
+        finally:
+            training.run_epoch = original_run_epoch
+
+        first_parameter = next(model.parameters()).detach().cpu()
+        self.assertTrue(torch.allclose(first_parameter, torch.ones_like(first_parameter)))
+        self.assertEqual([record["val_loss"] for record in history], [0.1, 0.2])
+
     def test_train_model_writes_checkpoint_when_warm_start_enabled(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             checkpoint_path = os.path.join(temp_dir, "checkpoint.pt")
@@ -292,6 +318,42 @@ class TrainModelTests(unittest.TestCase):
             self.assertIn("best_val_loss", checkpoint)
             self.assertIn("stale_epoch_count", checkpoint)
             self.assertEqual(checkpoint["config_signature"], training.cnn_checkpoint_signature(config))
+
+    def test_train_model_checkpoint_stores_best_validation_weights(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            checkpoint_path = os.path.join(temp_dir, "checkpoint.pt")
+            config = _config(
+                epochs=2,
+                batch_size=2,
+                embedding_dim=16,
+                warm_start=True,
+                checkpoint_path=checkpoint_path,
+            )
+            original_run_epoch = training.run_epoch
+            train_call_count = {"value": 0}
+            val_losses = [0.1, 0.2]
+
+            def controlled_epoch(model, loader, config, optimizer=None, device=None):
+                if optimizer is not None:
+                    train_call_count["value"] += 1
+                    with torch.no_grad():
+                        for parameter in model.parameters():
+                            parameter.fill_(float(train_call_count["value"]))
+                    return float(train_call_count["value"])
+                return val_losses.pop(0)
+
+            try:
+                training.run_epoch = controlled_epoch
+                training.train_model(_spatial_dataset(), _spatial_dataset(), config)
+            finally:
+                training.run_epoch = original_run_epoch
+
+            checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
+
+        best_state = checkpoint["best_model_state_dict"]
+        first_tensor = next(iter(best_state.values()))
+        self.assertTrue(torch.allclose(first_tensor, torch.ones_like(first_tensor)))
+        self.assertEqual(checkpoint["best_val_loss"], 0.1)
 
     def test_train_model_checkpoint_records_cnn_scaler_states(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -47,10 +47,12 @@ def _validated_early_stopping_patience(config):
 
 
 def _update_early_stopping(val_loss, best_val_loss, stale_epoch_count, patience):
-    if patience is None or val_loss is None:
+    if val_loss is None:
         return best_val_loss, stale_epoch_count, False
     if best_val_loss is None or val_loss < best_val_loss:
         return val_loss, 0, False
+    if patience is None:
+        return best_val_loss, stale_epoch_count, False
     stale_epoch_count += 1
     return best_val_loss, stale_epoch_count, stale_epoch_count >= patience
 
@@ -143,6 +145,13 @@ def _checkpoint_error_message():
     return "checkpoint is incompatible; remove checkpoint.pt or set WARM_START=False"
 
 
+def _copy_model_state_dict(model):
+    return {
+        name: value.detach().clone()
+        for name, value in model.state_dict().items()
+    }
+
+
 def _scaler_state(scaler):
     if scaler is None or not hasattr(scaler, "mean_") or not hasattr(scaler, "scale_"):
         return None
@@ -193,7 +202,7 @@ def _cnn_scalers_match_checkpoint(checkpoint, train_dataset):
 
 def _load_cnn_checkpoint_if_available(model, optimizer, train_dataset, config, device):
     if not config.warm_start or not config.checkpoint_path or not os.path.exists(config.checkpoint_path):
-        return 0, [], None, 0
+        return 0, [], None, 0, None
     checkpoint = torch.load(config.checkpoint_path, map_location=device)
     if checkpoint.get("config_signature") != cnn_checkpoint_signature(config):
         raise ValueError(_checkpoint_error_message())
@@ -201,11 +210,15 @@ def _load_cnn_checkpoint_if_available(model, optimizer, train_dataset, config, d
         raise ValueError(_checkpoint_error_message())
     model.load_state_dict(checkpoint["model_state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    best_model_state_dict = checkpoint.get("best_model_state_dict")
+    if best_model_state_dict is None and checkpoint.get("best_val_loss") is not None:
+        best_model_state_dict = _copy_model_state_dict(model)
     return (
         int(checkpoint.get("epoch", 0)),
         list(checkpoint.get("history", [])),
         checkpoint.get("best_val_loss"),
         int(checkpoint.get("stale_epoch_count", 0)),
+        best_model_state_dict,
     )
 
 
@@ -218,6 +231,7 @@ def _save_cnn_checkpoint(
     history,
     best_val_loss,
     stale_epoch_count,
+    best_model_state_dict,
 ):
     if not config.warm_start or not config.checkpoint_path:
         return None
@@ -232,6 +246,7 @@ def _save_cnn_checkpoint(
         "history": history,
         "best_val_loss": best_val_loss,
         "stale_epoch_count": stale_epoch_count,
+        "best_model_state_dict": best_model_state_dict,
         "scaler_states": _cnn_scaler_states(train_dataset),
         "config_signature": cnn_checkpoint_signature(config),
     }, temp_path)
@@ -265,7 +280,7 @@ def _coordinate_scalers_match_checkpoint(checkpoint, train_dataset):
 
 def _load_coordinate_checkpoint_if_available(model, optimizer, train_dataset, config, device):
     if not config.warm_start or not config.checkpoint_path or not os.path.exists(config.checkpoint_path):
-        return 0, [], None, 0
+        return 0, [], None, 0, None
     checkpoint = torch.load(config.checkpoint_path, map_location=device)
     if checkpoint.get("config_signature") != coordinate_checkpoint_signature(config):
         raise ValueError(_checkpoint_error_message())
@@ -273,11 +288,15 @@ def _load_coordinate_checkpoint_if_available(model, optimizer, train_dataset, co
         raise ValueError(_checkpoint_error_message())
     model.load_state_dict(checkpoint["model_state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    best_model_state_dict = checkpoint.get("best_model_state_dict")
+    if best_model_state_dict is None and checkpoint.get("best_val_loss") is not None:
+        best_model_state_dict = checkpoint["model_state_dict"]
     return (
         int(checkpoint.get("epoch", 0)),
         list(checkpoint.get("history", [])),
         checkpoint.get("best_val_loss"),
         int(checkpoint.get("stale_epoch_count", 0)),
+        best_model_state_dict,
     )
 
 
@@ -290,6 +309,7 @@ def _save_coordinate_checkpoint(
     history,
     best_val_loss,
     stale_epoch_count,
+    best_model_state_dict,
 ):
     if not config.warm_start or not config.checkpoint_path:
         return None
@@ -304,6 +324,7 @@ def _save_coordinate_checkpoint(
         "history": history,
         "best_val_loss": best_val_loss,
         "stale_epoch_count": stale_epoch_count,
+        "best_model_state_dict": best_model_state_dict,
         "stiffness_scaler_mean": train_dataset.stiffness_scaler.mean_.tolist(),
         "stiffness_scaler_scale": train_dataset.stiffness_scaler.scale_.tolist(),
         "local_strain_scaler_mean": train_dataset.local_strain_scaler.mean_.tolist(),
@@ -383,7 +404,7 @@ def train_coordinate_model(train_dataset, val_dataset, config):
         weight_decay=config.weight_decay,
     )
     early_stopping_patience = _validated_early_stopping_patience(config)
-    start_epoch, history, best_val_loss, stale_epoch_count = _load_coordinate_checkpoint_if_available(
+    start_epoch, history, best_val_loss, stale_epoch_count, best_model_state_dict = _load_coordinate_checkpoint_if_available(
         model,
         optimizer,
         train_dataset,
@@ -391,6 +412,8 @@ def train_coordinate_model(train_dataset, val_dataset, config):
         device,
     )
     if start_epoch >= config.epochs:
+        if best_model_state_dict is not None:
+            model.load_state_dict(best_model_state_dict)
         return model, history
 
     epoch_iterator = iter_progress(
@@ -420,6 +443,9 @@ def train_coordinate_model(train_dataset, val_dataset, config):
                 postfix["val_loss"] = val_loss
             epoch_iterator.set_postfix(postfix)
         history.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
+        is_best_model = val_loss is not None and (best_val_loss is None or val_loss < best_val_loss)
+        if is_best_model:
+            best_model_state_dict = _copy_model_state_dict(model)
         best_val_loss, stale_epoch_count, should_stop = _update_early_stopping(
             val_loss,
             best_val_loss,
@@ -435,9 +461,12 @@ def train_coordinate_model(train_dataset, val_dataset, config):
             history,
             best_val_loss,
             stale_epoch_count,
+            best_model_state_dict,
         )
         if should_stop:
             break
+    if best_model_state_dict is not None:
+        model.load_state_dict(best_model_state_dict)
     return model, history
 
 
@@ -476,7 +505,7 @@ def train_model(train_dataset, val_dataset, config):
         weight_decay=config.weight_decay,
     )
     early_stopping_patience = _validated_early_stopping_patience(config)
-    start_epoch, history, best_val_loss, stale_epoch_count = _load_cnn_checkpoint_if_available(
+    start_epoch, history, best_val_loss, stale_epoch_count, best_model_state_dict = _load_cnn_checkpoint_if_available(
         model,
         optimizer,
         train_dataset,
@@ -484,6 +513,8 @@ def train_model(train_dataset, val_dataset, config):
         device,
     )
     if start_epoch >= config.epochs:
+        if best_model_state_dict is not None:
+            model.load_state_dict(best_model_state_dict)
         return model, history
 
     epoch_iterator = iter_progress(
@@ -513,12 +544,15 @@ def train_model(train_dataset, val_dataset, config):
                 postfix["val_loss"] = val_loss
             epoch_iterator.set_postfix(postfix)
         history.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
+        previous_best_val_loss = best_val_loss
         best_val_loss, stale_epoch_count, should_stop = _update_early_stopping(
             val_loss,
             best_val_loss,
             stale_epoch_count,
             early_stopping_patience,
         )
+        if val_loss is not None and best_val_loss != previous_best_val_loss:
+            best_model_state_dict = _copy_model_state_dict(model)
         _save_cnn_checkpoint(
             model,
             optimizer,
@@ -528,9 +562,12 @@ def train_model(train_dataset, val_dataset, config):
             history,
             best_val_loss,
             stale_epoch_count,
+            best_model_state_dict,
         )
         if should_stop:
             break
+    if best_model_state_dict is not None:
+        model.load_state_dict(best_model_state_dict)
     return model, history
 
 

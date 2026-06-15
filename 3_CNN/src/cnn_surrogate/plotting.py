@@ -137,15 +137,17 @@ def plot_coordinate_local_strain_pred_vs_true(predictions, figure_dir):
         for target_column in coordinate_target_columns()[1:]:
             true_values.append(predictions[target_column + "_true"].values.astype(float))
             pred_values.append(predictions[target_column + "_pred"].values.astype(float))
+        true_max_values = np.max(np.column_stack(true_values), axis=1)
+        pred_max_values = np.max(np.column_stack(pred_values), axis=1)
         _plot_identity_scatter(
-            np.concatenate(true_values),
-            np.concatenate(pred_values),
-            "FEM",
-            "CoordinateSurrogate",
+            true_max_values,
+            pred_max_values,
+            "FEM max local strain concentration",
+            "CoordinateSurrogate max local strain concentration",
         )
     else:
-        plt.xlabel("FEM")
-        plt.ylabel("CoordinateSurrogate")
+        plt.xlabel("FEM max local strain concentration")
+        plt.ylabel("CoordinateSurrogate max local strain concentration")
     plt.tight_layout()
     plt.savefig(path, dpi=150)
     plt.close()
@@ -162,15 +164,17 @@ def plot_cnn_local_strain_pred_vs_true(predictions, figure_dir):
         for target_column in cnn_target_columns()[1:]:
             true_values.append(predictions[target_column + "_true"].values.astype(float))
             pred_values.append(predictions[target_column + "_pred"].values.astype(float))
+        true_max_values = np.max(np.column_stack(true_values), axis=1)
+        pred_max_values = np.max(np.column_stack(pred_values), axis=1)
         _plot_identity_scatter(
-            np.concatenate(true_values),
-            np.concatenate(pred_values),
-            "FEM",
-            "CNN",
+            true_max_values,
+            pred_max_values,
+            "FEM max local strain concentration",
+            "CNN max local strain concentration",
         )
     else:
-        plt.xlabel("FEM")
-        plt.ylabel("CNN")
+        plt.xlabel("FEM max local strain concentration")
+        plt.ylabel("CNN max local strain concentration")
     plt.tight_layout()
     plt.savefig(path, dpi=150)
     plt.close()

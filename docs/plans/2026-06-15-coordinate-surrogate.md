@@ -1401,7 +1401,7 @@ def plot_coordinate_stiffness_pred_vs_true(predictions, figure_dir):
     return path
 ```
 
-Add `plot_coordinate_local_strain_pred_vs_true(predictions, figure_dir)` by flattening the 24 local target true/pred columns into one scatter plot and writing `local_strain_pred_vs_true.png`.
+Add `plot_coordinate_local_strain_pred_vs_true(predictions, figure_dir)` by taking the per-sample maximum across the 24 local strain true/pred columns, plotting those global maximum values in one scatter plot, and writing `local_strain_pred_vs_true.png`.
 
 Add `plot_coordinate_local_strain_error_distribution(predictions, figure_dir)` by flattening all 24 local true/pred errors and plotting the error distribution. Write `local_strain_error_distribution.png`.
 

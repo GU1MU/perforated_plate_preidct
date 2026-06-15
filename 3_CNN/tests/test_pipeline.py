@@ -12,6 +12,7 @@ CNN_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = CNN_ROOT / "src"
 sys.path.insert(0, str(SRC_DIR))
 
+from cnn_surrogate import plotting
 from cnn_surrogate.config import BaselineTrainingConfig
 from cnn_surrogate.data import cnn_target_columns
 from cnn_surrogate.pipeline import run_baseline_training
@@ -61,6 +62,39 @@ class BaselineConfigTests(unittest.TestCase):
         self.assertEqual(config.image_height, 80)
         self.assertEqual(config.image_width, 40)
         self.assertTrue(config.show_progress)
+
+
+class CnnPlottingTests(unittest.TestCase):
+    def test_local_strain_pred_vs_true_uses_sample_maximum(self):
+        rows = []
+        for row_offset in [0.0, 100.0]:
+            row = {}
+            for index, target_column in enumerate(cnn_target_columns()[1:], start=1):
+                row[target_column + "_true"] = row_offset + float(index)
+                row[target_column + "_pred"] = row_offset + float(index * 2)
+            rows.append(row)
+        predictions = pd.DataFrame(rows)
+
+        captured = {}
+        original_scatter = plotting._plot_identity_scatter
+
+        def capture_scatter(true_values, pred_values, xlabel, ylabel):
+            captured["true_values"] = list(true_values)
+            captured["pred_values"] = list(pred_values)
+            captured["xlabel"] = xlabel
+            captured["ylabel"] = ylabel
+
+        plotting._plot_identity_scatter = capture_scatter
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                plotting.plot_cnn_local_strain_pred_vs_true(predictions, temp_dir)
+        finally:
+            plotting._plot_identity_scatter = original_scatter
+
+        self.assertEqual(captured["true_values"], [24.0, 124.0])
+        self.assertEqual(captured["pred_values"], [48.0, 148.0])
+        self.assertEqual(captured["xlabel"], "FEM max local strain concentration")
+        self.assertEqual(captured["ylabel"], "CNN max local strain concentration")
 
 
 def _sample_row(group=1, instance=1, status="ok"):
